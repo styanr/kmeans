@@ -2,6 +2,9 @@ type ClusterizeImageOptions = {
   horizontalStep: number;
   verticalStep: number;
   clusterQuantity: number;
+  initializationMethod: "kmeans++" | "random";
+  maxIterations: number;
+  tolerance: number;
 };
 
 async function applyHueShift(file: File, degrees = 90): Promise<File> {
@@ -34,6 +37,9 @@ export const clusterizeImage = async (
     horizontalStep: 1,
     verticalStep: 1,
     clusterQuantity: 2,
+    initializationMethod: "kmeans++",
+    maxIterations: 100,
+    tolerance: 0.01,
     ...options,
   };
 

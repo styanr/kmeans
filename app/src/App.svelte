@@ -12,7 +12,12 @@
 
   let horizontalStep = $state<number>(1);
   let verticalStep = $state<number>(1);
-  let clustersQuantity = $state<number>(2);
+  let clusterQuantity = $state<number>(2);
+
+  let initializationMethod = $state<"random" | "kmeans++">("kmeans++");
+  let maxIterations = $state<number>(100);
+  let tolerance = $state<number>(0.0001);
+
   let processedImageOpacity = $state(100);
   let isLoading = $state(false);
 
@@ -36,7 +41,14 @@
     isLoading = true;
 
     try {
-      const processed = await clusterizeImage(imageFile);
+      const processed = await clusterizeImage(imageFile, {
+        horizontalStep,
+        verticalStep,
+        clusterQuantity,
+        initializationMethod,
+        maxIterations,
+        tolerance,
+      });
       processedImageFile = processed;
     } finally {
       isLoading = false;
@@ -48,7 +60,10 @@
     processedImageFile = null;
     horizontalStep = 1;
     verticalStep = 1;
-    clustersQuantity = 2;
+    clusterQuantity = 2;
+    initializationMethod = "kmeans++";
+    maxIterations = 100;
+    tolerance = 0.0001;
     processedImageOpacity = 100;
   };
 
@@ -89,7 +104,25 @@
           </div>
           <div class="items-center grid grid-cols-[30%_70%]">
             <Label>Clusters Number</Label>
-            <Input type="number" bind:value={clustersQuantity} min="1" />
+            <Input type="number" bind:value={clusterQuantity} min="1" />
+          </div>
+          <div class="items-center grid grid-cols-[30%_70%]">
+            <Label>Initialization</Label>
+            <select
+              bind:value={initializationMethod}
+              class="border rounded px-2 py-1"
+            >
+              <option value="random">Random</option>
+              <option value="kmeans++">K-Means++</option>
+            </select>
+          </div>
+          <div class="items-center grid grid-cols-[30%_70%]">
+            <Label>Max Iterations</Label>
+            <Input type="number" bind:value={maxIterations} min="1" />
+          </div>
+          <div class="items-center grid grid-cols-[30%_70%]">
+            <Label>Tolerance</Label>
+            <Input type="number" step="0.0001" bind:value={tolerance} min="0" />
           </div>
         </div>
         <Button disabled={isLoading} type="submit">Clusterize</Button>
@@ -103,14 +136,13 @@
           src={imageUrl}
         />
         {#if processedImageUrl}
-          <div class="absolute h-full">
+          <div class="absolute h-full w-full">
             <img
               style={`opacity: ${processedImageOpacity}%`}
               class="w-full h-full object-contain"
               alt="placeholder"
               src={processedImageUrl}
             />
-            <!-- TODO: wrong starting value -->
             <Slider
               type="single"
               min={0}
