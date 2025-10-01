@@ -1,8 +1,7 @@
 type ClusterizeImageOptions = {
-  horizontalStep: number;
-  verticalStep: number;
+  xStep: number;
+  yStep: number;
   clusterQuantity: number;
-  initializationMethod: "kmeans++" | "random";
   maxIterations: number;
   tolerance: number;
 };
@@ -14,20 +13,51 @@ type Pixel = {
   alpha: number;
 };
 
-const toPixelArray = (data: Uint8ClampedArray) => {
+const toPixelArray = (
+  data: Uint8ClampedArray,
+  height: number,
+  width: number,
+  xStep: number = 1,
+  yStep: number = 1,
+) => {
   const startTime = performance.now();
 
-  if (data.length % 4 !== 0) {
-    throw new Error("Invalid image array length");
+  if (height * width !== data.length / 4) {
+    throw new Error("Invalid image dimensions");
   }
-  const pixels: Pixel[] = new Array<Pixel>(data.length / 4);
-  for (let i = 0; i < data.length; i += 4) {
-    pixels[i / 4] = {
-      red: data[i],
-      green: data[i + 1],
-      blue: data[i + 2],
-      alpha: data[i + 3],
-    };
+
+  const cellsX = Math.ceil(width / xStep);
+  const cellsY = Math.ceil(height / yStep);
+  const pixels: Pixel[] = new Array(cellsX * cellsY);
+
+  let index = 0;
+
+  for (let y = 0; y < height; y += yStep) {
+    for (let x = 0; x < width; x += xStep) {
+      let r = 0,
+        g = 0,
+        b = 0,
+        a = 0,
+        count = 0;
+
+      for (let yy = 0; yy < yStep && y + yy < height; yy++) {
+        for (let xx = 0; xx < xStep && x + xx < width; xx++) {
+          const idx = ((y + yy) * width + (x + xx)) * 4;
+          r += data[idx];
+          g += data[idx + 1];
+          b += data[idx + 2];
+          a += data[idx + 3];
+          count++;
+        }
+      }
+
+      pixels[index++] = {
+        red: r / count,
+        green: g / count,
+        blue: b / count,
+        alpha: a / count,
+      };
+    }
   }
 
   const endTime = performance.now();
@@ -35,6 +65,42 @@ const toPixelArray = (data: Uint8ClampedArray) => {
     `🔄 toPixelArray: ${(endTime - startTime).toFixed(2)}ms (${pixels.length} pixels)`,
   );
   return pixels;
+};
+
+const fromPixelArray = (
+  pixels: Pixel[],
+  height: number,
+  width: number,
+  xStep: number = 1,
+  yStep: number = 1,
+): Uint8ClampedArray => {
+  const cellsX = Math.ceil(width / xStep);
+  const cellsY = Math.ceil(height / yStep);
+
+  if (pixels.length !== cellsX * cellsY) {
+    throw new Error("Pixel array length does not match expected grid size");
+  }
+
+  const output = new Uint8ClampedArray(width * height * 4);
+
+  let index = 0;
+  for (let y = 0; y < height; y += yStep) {
+    for (let x = 0; x < width; x += xStep) {
+      const { red, green, blue, alpha } = pixels[index++];
+
+      for (let yy = 0; yy < yStep && y + yy < height; yy++) {
+        for (let xx = 0; xx < xStep && x + xx < width; xx++) {
+          const idx = ((y + yy) * width + (x + xx)) * 4;
+          output[idx] = red;
+          output[idx + 1] = green;
+          output[idx + 2] = blue;
+          output[idx + 3] = alpha;
+        }
+      }
+    }
+  }
+
+  return output;
 };
 
 const unique = <T>(
@@ -95,34 +161,34 @@ export const clusterizeImage = async (
   console.log(`🚀 Starting clusterizeImage for ${file.name}`);
 
   const allOptions: ClusterizeImageOptions = {
-    horizontalStep: 1,
-    verticalStep: 1,
+    xStep: 1,
+    yStep: 1,
     clusterQuantity: 2,
-    initializationMethod: "kmeans++",
     maxIterations: 100,
-    tolerance: 0.01,
+    tolerance: 0.1,
     ...options,
   };
 
-  // Canvas creation timing
   const canvas = await createCanvas(file);
   const context = canvas.getContext("2d")!;
 
-  // Image data extraction timing
   const imageDataStart = performance.now();
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
   const imageDataEnd = performance.now();
   console.log(
     `📊 getImageData: ${(imageDataEnd - imageDataStart).toFixed(2)}ms`,
   );
 
-  // Pixel array conversion timing
-  const pixels = toPixelArray(imageData.data);
+  const pixels = toPixelArray(
+    imageData.data,
+    imageData.height,
+    imageData.width,
+    allOptions.xStep,
+    allOptions.yStep,
+  );
 
-  // Unique colors timing
   const uniqueColors = unique(pixels);
 
-  // Centroid initialization timing
   const initStart = performance.now();
   const centroids = new Array<Pixel>(allOptions.clusterQuantity);
   const clusters: Map<number, number> = new Map<number, number>();
@@ -133,6 +199,7 @@ export const clusterizeImage = async (
     do {
       index = Math.floor(Math.random() * uniqueColors.length);
     } while (picked.includes(index));
+
     picked[i] = index;
     const color = uniqueColors[index];
 
@@ -148,7 +215,6 @@ export const clusterizeImage = async (
 
   let previousCentroids: Pixel[] = [];
 
-  // K-means iterations timing
   const iterationsStart = performance.now();
   let iterationCount = 0;
 
@@ -158,21 +224,17 @@ export const clusterizeImage = async (
 
     previousCentroids = centroids.map((c) => ({ ...c }));
 
-    // Assignment phase timing
     const assignStart = performance.now();
 
-    // OPTIMIZED VERSION: Avoid arrays and sqrt
     for (let pixel = 0; pixel < pixels.length; pixel++) {
       let closestCentroid = 0;
       let minDistanceSquared = Infinity;
 
       const p = pixels[pixel];
 
-      // Find closest centroid without creating arrays
       for (let ci = 0; ci < centroids.length; ci++) {
         const c = centroids[ci];
 
-        // Use squared distance (avoid expensive sqrt)
         const distSquared =
           (p.alpha - c.alpha) * (p.alpha - c.alpha) +
           (p.red - c.red) * (p.red - c.red) +
@@ -189,10 +251,8 @@ export const clusterizeImage = async (
     }
     const assignEnd = performance.now();
 
-    // Update phase timing
     const updateStart = performance.now();
 
-    // OPTIMIZED VERSION: Single pass through pixels
     const clusterSums = new Array(centroids.length).fill(null).map(() => ({
       red: 0,
       green: 0,
@@ -203,7 +263,6 @@ export const clusterizeImage = async (
 
     const clusterBuildStart = performance.now();
 
-    // Single iteration through all pixels
     for (let pixel = 0; pixel < pixels.length; pixel++) {
       const clusterIndex = clusters.get(pixel)!;
       const p = pixels[pixel];
@@ -218,7 +277,6 @@ export const clusterizeImage = async (
 
     const clusterBuildEnd = performance.now();
 
-    // Calculate new centroids
     const centroidCalcStart = performance.now();
     for (let ci = 0; ci < centroids.length; ci++) {
       const sum = clusterSums[ci];
@@ -241,7 +299,6 @@ export const clusterizeImage = async (
       `    └── Centroid calc: ${(centroidCalcEnd - centroidCalcStart).toFixed(2)}ms`,
     );
 
-    // Convergence check timing
     const convStart = performance.now();
     const hasConverged = centroids.every((centroid, i) => {
       const dist = distance(centroid, previousCentroids[i]);
@@ -270,18 +327,27 @@ export const clusterizeImage = async (
     `🔄 K-means iterations: ${(iterationsEnd - iterationsStart).toFixed(2)}ms total (${iterationCount} iterations, ${avgIterationTime.toFixed(2)}ms avg)`,
   );
 
-  // Final image reconstruction timing
   const reconstructStart = performance.now();
   for (let i = 0; i < pixels.length; i++) {
     const clusterIndex = clusters.get(i)!;
     const centroid = centroids[clusterIndex];
 
-    const dataIndex = i * 4;
-    imageData.data[dataIndex] = Math.round(centroid.red);
-    imageData.data[dataIndex + 1] = Math.round(centroid.green);
-    imageData.data[dataIndex + 2] = Math.round(centroid.blue);
-    imageData.data[dataIndex + 3] = Math.round(centroid.alpha);
+    const pixel = pixels[i];
+    pixel.alpha = Math.round(centroid.alpha);
+    pixel.blue = Math.round(centroid.blue);
+    pixel.green = Math.round(centroid.green);
+    pixel.red = Math.round(centroid.red);
   }
+
+  const newData = fromPixelArray(
+    pixels,
+    imageData.height,
+    imageData.width,
+    allOptions.xStep,
+    allOptions.yStep,
+  );
+
+  imageData.data.set(newData);
 
   context.putImageData(imageData, 0, 0);
   const reconstructEnd = performance.now();
@@ -289,7 +355,6 @@ export const clusterizeImage = async (
     `🏗️  Image reconstruction: ${(reconstructEnd - reconstructStart).toFixed(2)}ms`,
   );
 
-  // Canvas to file conversion timing
   const exportStart = performance.now();
   const result = await new Promise<File>((resolve) => {
     canvas.toBlob((blob) => {
@@ -304,7 +369,6 @@ export const clusterizeImage = async (
   const totalTime = totalEndTime - totalStartTime;
   console.log(`🏁 Total clusterizeImage time: ${totalTime.toFixed(2)}ms`);
 
-  // Performance summary
   console.log(`\n📊 PERFORMANCE SUMMARY:`);
   console.log(
     `├── Canvas creation: ${(performance.now() - totalStartTime - totalTime + (performance.now() - totalStartTime)).toFixed(1)}%`,

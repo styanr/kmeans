@@ -10,13 +10,12 @@
   let imageFile = $state<File | null>();
   let processedImageFile = $state<File | null>();
 
-  let horizontalStep = $state<number>(1);
-  let verticalStep = $state<number>(1);
+  let xStep = $state<number>(1);
+  let yStep = $state<number>(1);
   let clusterQuantity = $state<number>(2);
 
-  let initializationMethod = $state<"random" | "kmeans++">("kmeans++");
   let maxIterations = $state<number>(100);
-  let tolerance = $state<number>(0.0001);
+  let tolerance = $state<number>(0.1);
 
   let processedImageOpacity = $state(100);
   let isLoading = $state(false);
@@ -30,6 +29,7 @@
 
   const onUpload = (files: File[]) => {
     imageFile = files[0];
+    return Promise.resolve();
   };
 
   const onSubmit = async (e: SubmitEvent) => {
@@ -39,13 +39,13 @@
     }
 
     isLoading = true;
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
       const processed = await clusterizeImage(imageFile, {
-        horizontalStep,
-        verticalStep,
+        xStep,
+        yStep,
         clusterQuantity,
-        initializationMethod,
         maxIterations,
         tolerance,
       });
@@ -58,12 +58,11 @@
   const reset = () => {
     imageFile = null;
     processedImageFile = null;
-    horizontalStep = 1;
-    verticalStep = 1;
+    xStep = 1;
+    yStep = 1;
     clusterQuantity = 2;
-    initializationMethod = "kmeans++";
     maxIterations = 100;
-    tolerance = 0.0001;
+    tolerance = 0.1;
     processedImageOpacity = 100;
   };
 
@@ -85,101 +84,100 @@
       <LoaderCircleIcon size={40} class="animate-spin" />
     </div>
   {/if}
-  <h1 class="text-3xl mb-10">K-Means Clustering</h1>
+  <div class="scale-150">
+    <h1 class="text-3xl mb-10 text-center">K-Means Clustering</h1>
 
-  <div class="flex flex-row w-6xl h-[35rem] gap-5 justify-center">
-    {#if imageUrl !== ""}
-      <form
-        class="flex-1 flex flex-col h-full justify-between"
-        onsubmit={onSubmit}
-      >
-        <div class="flex flex-col gap-5">
-          <div class="items-center grid grid-cols-[30%_70%]">
-            <Label>Horizontal Step</Label>
-            <Input type="number" bind:value={horizontalStep} min="1" />
+    <div class="flex flex-row w-6xl h-[35rem] gap-5 justify-center">
+      {#if imageUrl !== ""}
+        <form
+          class="flex-1 flex flex-col h-full justify-between"
+          onsubmit={onSubmit}
+        >
+          <div class="flex flex-col gap-5">
+            <div class="items-center grid grid-cols-[30%_70%]">
+              <Label>Horizontal Step</Label>
+              <Input type="number" bind:value={xStep} min="1" />
+            </div>
+            <div class="items-center grid grid-cols-[30%_70%]">
+              <Label>Vertical Step</Label>
+              <Input type="number" bind:value={yStep} min="1" />
+            </div>
+            <div class="items-center grid grid-cols-[30%_70%]">
+              <Label>Clusters Number</Label>
+              <Input type="number" bind:value={clusterQuantity} min="1" />
+            </div>
+            <div class="items-center grid grid-cols-[30%_70%]">
+              <Label>Max Iterations</Label>
+              <Input type="number" bind:value={maxIterations} min="1" />
+            </div>
+            <div class="items-center grid grid-cols-[30%_70%]">
+              <Label>Tolerance</Label>
+              <Input
+                type="number"
+                step="0.0001"
+                bind:value={tolerance}
+                min="0"
+              />
+            </div>
           </div>
-          <div class="items-center grid grid-cols-[30%_70%]">
-            <Label>Vertical Step</Label>
-            <Input type="number" bind:value={verticalStep} min="1" />
-          </div>
-          <div class="items-center grid grid-cols-[30%_70%]">
-            <Label>Clusters Number</Label>
-            <Input type="number" bind:value={clusterQuantity} min="1" />
-          </div>
-          <div class="items-center grid grid-cols-[30%_70%]">
-            <Label>Initialization</Label>
-            <select
-              bind:value={initializationMethod}
-              class="border rounded px-2 py-1"
-            >
-              <option value="random">Random</option>
-              <option value="kmeans++">K-Means++</option>
-            </select>
-          </div>
-          <div class="items-center grid grid-cols-[30%_70%]">
-            <Label>Max Iterations</Label>
-            <Input type="number" bind:value={maxIterations} min="1" />
-          </div>
-          <div class="items-center grid grid-cols-[30%_70%]">
-            <Label>Tolerance</Label>
-            <Input type="number" step="0.0001" bind:value={tolerance} min="0" />
-          </div>
-        </div>
-        <Button disabled={isLoading} type="submit">Clusterize</Button>
-      </form>
-      <div
-        class={"relative border-border flex h-full flex-1 place-items-center justify-center rounded-lg border-2 border-dashed transition-all hover:cursor-pointer aria-disabled:opacity-50 aria-disabled:hover:cursor-not-allowed"}
-      >
-        <img
-          class="w-full h-full object-contain"
-          alt="placeholder"
-          src={imageUrl}
-        />
-        {#if processedImageUrl}
-          <div class="absolute h-full w-full">
-            <img
-              style={`opacity: ${processedImageOpacity}%`}
-              class="w-full h-full object-contain"
-              alt="placeholder"
-              src={processedImageUrl}
-            />
-            <Slider
-              type="single"
-              min={0}
-              max={100}
-              step={1}
-              bind:value={processedImageOpacity}
-            />
-            {processedImageOpacity}
-          </div>
-        {/if}
-        <div class="absolute right-0 bottom-0 -translate-5 flex flex-row gap-5">
+          <Button disabled={isLoading} type="submit">Clusterize</Button>
+        </form>
+        <div
+          class={"relative border-border flex h-full flex-1 place-items-center justify-center rounded-lg border-2 border-dashed transition-all hover:cursor-pointer aria-disabled:opacity-50 aria-disabled:hover:cursor-not-allowed"}
+        >
+          <img
+            class="w-full h-full object-contain"
+            alt="placeholder"
+            src={imageUrl}
+          />
           {#if processedImageUrl}
-            <Button
-              class="rounded-full h-10 !px-5"
-              disabled={isLoading}
-              onclick={download}
-            >
-              <DownloadIcon />
-              Download
-            </Button>
+            <div class="absolute h-full w-full">
+              <img
+                style={`opacity: ${processedImageOpacity}%`}
+                class="w-full h-full object-contain"
+                alt="placeholder"
+                src={processedImageUrl}
+              />
+              <Slider
+                type="single"
+                min={0}
+                max={100}
+                step={1}
+                bind:value={processedImageOpacity}
+              />
+              {processedImageOpacity}
+            </div>
           {/if}
-          <Button
-            class="rounded-full h-10 w-10"
-            variant="destructive"
-            disabled={isLoading}
-            onclick={reset}
+          <div
+            class="absolute right-0 bottom-0 -translate-5 flex flex-row gap-5"
           >
-            <XIcon size={12} />
-          </Button>
+            {#if processedImageUrl}
+              <Button
+                class="rounded-full h-10 !px-5"
+                disabled={isLoading}
+                onclick={download}
+              >
+                <DownloadIcon />
+                Download
+              </Button>
+            {/if}
+            <Button
+              class="rounded-full h-10 w-10"
+              variant="destructive"
+              disabled={isLoading}
+              onclick={reset}
+            >
+              <XIcon size={12} />
+            </Button>
+          </div>
         </div>
-      </div>
-    {:else}
-      <FileDropZone
-        {onUpload}
-        accept="image/png, image/jpeg"
-        class="flex-1 h-full"
-      />
-    {/if}
+      {:else}
+        <FileDropZone
+          {onUpload}
+          accept="image/png, image/jpeg"
+          class="flex-1 h-full"
+        />
+      {/if}
+    </div>
   </div>
 </main>
